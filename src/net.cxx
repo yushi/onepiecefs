@@ -7,6 +7,9 @@ int ss;
 
 void setup_network() {
   ss = get_server_socket();
+  if(ss == -1){
+    exit(-1);
+  }
   event_set(&server_ev, ss, EV_READ | EV_PERSIST, accept_handler, &server_ev);
   event_add(&server_ev, NULL);
 }
@@ -71,8 +74,7 @@ int get_server_socket() {
   memset(&hints, 0, sizeof(hints));
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
-  //if(getaddrinfo(NULL, "3027", &hints, &res) !=  0){
-  if(getaddrinfo(NULL, "LiebDevMgmt_C", &hints, &res) !=  0){
+  if(getaddrinfo(NULL, "3027", &hints, &res) !=  0){
     // error log
     printf("getaddringo: failed");
   }
