@@ -3,6 +3,7 @@ import os
 import socket
 import stat
 
+
 class OPFSStat():
     def __init__(self, stat_str):
         if stat_str != None:
@@ -66,17 +67,17 @@ class OPFSUtil:
         return addrs
 
     @classmethod
-    def stat2str(self,st):
+    def stat2str(self, st):
         values = [
             ['st_mode', str(st.st_mode)],
             ['st_ino',  str(st.st_ino)],
             ['st_dev', str(st.st_dev)],
-            ['st_nlink',str(st.st_nlink)],
-            ['st_uid',str(st.st_uid)],
-            ['st_gid',str(st.st_gid)],
-            ['st_size',str(st.st_size)],
-            ['st_atime',str(st.st_atime)],
-            ['st_mtime',str(st.st_mtime)],
-            ['st_ctime',str(st.st_ctime)],
+            ['st_nlink', str(st.st_nlink)],
+            ['st_uid', str(st.st_uid)],
+            ['st_gid', str(st.st_gid)],
+            ['st_size', str(st.st_size)],
+            ['st_atime', str(st.st_atime)],
+            ['st_mtime', str(st.st_mtime)],
+            ['st_ctime', str(st.st_ctime)],
             ]
         return "\n".join(map(lambda x: ':'.join(x), values))
