@@ -21,8 +21,14 @@ class OPFSClient:
 
     def GET(self, path, size=None, offset=None):
         if size != None and offset != None:
+            param = {
+                'size': str(size),
+                'offset': str(offset)
+                }
+            parh = self._build_url(path, param)
             path = path + '?size=' + str(size) + '&offset=' + str(offset)
-
+        log("PATH")
+        log(path)
         return self.request('GET', path)
 
     def PROPFIND(self, path):
@@ -37,3 +43,8 @@ class OPFSClient:
         conn.request(method, path)
         resp = conn.getresponse()
         return resp.read()
+
+    def _build_url(self, url, param):
+        ret = url
+        return url + '?' + '&'.join(map(lambda key: key + '=' + param[key],
+                               param.keys()))

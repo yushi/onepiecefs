@@ -83,6 +83,7 @@ class OPFS(Fuse):
             if self._search_peer_by_path(path):
                 if self._is_readonly(flags):
                     # ok
+                    self.log("OKOK")
                     return
                 else:
                     # write not support
