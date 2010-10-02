@@ -1,5 +1,5 @@
-import os, stat, errno
-import syslog
+import os, stat, errno, re
+import syslog, sys
 from opfsc import OPFSClient
 import syslog
 
@@ -24,13 +24,18 @@ def log(message):
 
 class OPFS(Fuse):
 
-    #def __init__(self, memcache, *args, **kw):
-    #fuse.Fuse.__init__(self, *args, **kw)
-        ##self.__memcache = memcache
+    def __init__(self, *args, **kw):
+        fuse.Fuse.__init__(self, *args, **kw)
+        self.peers_file = '~/.opfs_peers'
 
     def getattr(self, path):
+        ret = None
         try:
-            ret = OPFSClient().PROPFIND(path)
+            for peer in self.peers:
+                log(peer)
+                ret = OPFSClient(peer).PROPFIND(path)
+                if ret:
+                    break
         except Exception, info:
             log("getattr error: %s" % (info))
 
@@ -40,11 +45,12 @@ class OPFS(Fuse):
             return -errno.ENOENT
 
     def readdir(self, path, offset):
+        dirs = ['.', '..']
         try:
-            resp = OPFSClient().GET(path)
-            dirs = resp.split('\n')
-            dirs.append('.')
-            dirs.append('..')
+            for peer in self.peers:
+                resp = OPFSClient(peer).GET(path)
+                for dirname in resp.split('\n'):
+                    dirs.append(dirname)
 
             for r in dirs:
                 yield fuse.Direntry(r)
@@ -53,7 +59,10 @@ class OPFS(Fuse):
 
     def open(self, path, flags):
         try:
-            ret = OPFSClient().PROPFIND(path)
+            for peer in self.peers:
+                ret = OPFSClient(peer).PROPFIND(path)
+                if ret != None:
+                    break
         except Exception, info:
             log("open error: %s" % (info))
 
@@ -68,10 +77,16 @@ class OPFS(Fuse):
 
     def read(self, path, size, offset):
         try:
-            filesize = self._file_size(path)
+            peer = None
+            for candidate in self.peers:
+                ret = OPFSClient(candidate).PROPFIND(path)
+                if ret != None:
+                    peer = candidate
+
+            filesize = self._file_size(path, peer)
             if filesize != None:
                 if offset < filesize:
-                    return OPFSClient().GET(path, size, offset)
+                    return OPFSClient(peer).GET(path, size, offset)
                 else:
                     return ''
 
@@ -80,11 +95,40 @@ class OPFS(Fuse):
 
         return -errno.ENOENT
 
-    def _stat(self, path):
-        return OPFSClient().PROPFIND(path)
+    def setup_peer(self):
+        self.peers_file = os.path.realpath(os.path.expanduser(self.peers_file))
+        print self.peers_file
+        if os.path.exists(self.peers_file):
+            self.peers = self.read_peers_file()
+            if len(self.peers) == 0:
+                print "please setup %s" % (self.peers_file)
+                sys.exit(-1)
 
-    def _file_size(self, path):
-        st = self._stat(path)
+        else:
+            self.create_peers_file()
+            print "please setup %s" % (self.peers_file)
+            sys.exit(-1)
+        
+    def create_peers_file(self):
+        f = open(self.peers_file, 'w')
+        f.write("#please write 1 entry 1 file\n#localhost:8000\n")
+        f.close
+
+    def read_peers_file(self):
+        f = open(self.peers_file, 'r')
+        data =f.read()
+        peers = []
+        for l in data.split("\n"):
+            if re.compile("\s*[^#]\S+").match(l):
+                peers.append(l)
+        return peers
+        
+        
+    def _stat(self, path, peer):
+        return OPFSClient(peer).PROPFIND(path)
+
+    def _file_size(self, path, peer):
+        st = self._stat(path, peer)
         if st:
             return st.st_size
         else:
@@ -92,13 +136,18 @@ class OPFS(Fuse):
 
 def main():
     usage="""
-Userspace hello example
+OnePiece FS
 
 """ + Fuse.fusage
     server = OPFS(version="%prog " + fuse.__version__,
-                     usage=usage,
-                     dash_s_do='setsingle')
-    server.parse(errex=1)
+                  usage=usage,
+                  dash_s_do='setsingle')
+    server.parser.add_option(mountopt="peers", metavar="filename", default='',
+                             help="peer address and port")
+
+    server.parse(values=server, errex=1)
+    server.setup_peer()
+
     server.main()
 
 if __name__ == '__main__':

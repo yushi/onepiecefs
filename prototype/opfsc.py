@@ -8,6 +8,14 @@ def log(message):
     syslog.syslog(syslog.LOG_ALERT, message)
 
 class OPFSClient:
+    def __init__(self, target):
+        try:
+            host, port = target.split(":")
+            self.host = host
+            self.port = int(port)
+        except Exception, info:
+            log("parameter error. please check config")
+
     def GET(self, path, size = None, offset = None):
         if size != None and offset != None:
             path = path + '?size=' + str(size) + '&offset=' + str(offset)
@@ -22,7 +30,8 @@ class OPFSClient:
             return None
 
     def request(self, method, path):
-        conn = HTTPConnection("localhost", 8000)
+        log("!%s:%d" % (self.host, self.port))
+        conn = HTTPConnection(self.host, self.port)
         conn.request(method, path)
         resp = conn.getresponse()
         return resp.read()

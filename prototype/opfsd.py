@@ -2,6 +2,7 @@ import os
 import sys
 import BaseHTTPServer
 import pickle
+from optparse import OptionParser
 
 class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_PROPFIND(self):
@@ -17,7 +18,7 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             print stat
         except Exception, info:
             print info
-            
+            self.wfile.write(pickle.dumps(None))
 
 
         
@@ -77,13 +78,19 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 def run(server_class=BaseHTTPServer.HTTPServer,
         handler_class=BaseHTTPServer.BaseHTTPRequestHandler):
     
-    server_address = ('', 8000)
-    httpd = server_class(server_address, OPFSDHandler)
+    parser = OptionParser()
+    parser.add_option("-p", "--port", dest="port",
+                      help="listen port", default="8000")
 
-    if len(sys.argv) != 2:
+    (options, args) = parser.parse_args()
+    server_address = ('', int(options.port))
+    print "listen port: %s" % (options.port)
+    httpd = server_class(server_address, OPFSDHandler)
+    
+    if len(args) != 1:
         print "usage: python opfsd.py <publish path>"
         sys.exit(-1)
-    basedir = sys.argv.pop()
+    basedir = args.pop()
 
     httpd.config = {
         'basedir': basedir,
