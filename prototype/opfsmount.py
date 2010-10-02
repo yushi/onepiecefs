@@ -4,7 +4,7 @@ import errno
 import syslog
 import sys
 from opfsc import OPFSClient
-from opfsutil import OPFSUtil
+from opfsutil import OPFSUtil, OPFSStat
 import syslog
 
 try:
@@ -131,17 +131,21 @@ class OPFS(Fuse):
 
     def _readdir_opfs(self, path, peer):
         try:
-            return OPFSClient(peer).GET(path)
+            return OPFSClient(peer).readdir(path)
         except Exception, info:
             self.log("_readdir_opfs: %s" % (info))
             return None
 
     def _read_opfs(self, path, size, offset, peer):
-        return OPFSClient(peer).GET(path, size, offset)
+        return OPFSClient(peer).read(path, size, offset)
 
     def _stat_opfs(self, path, peer):
         try:
-            return OPFSClient(peer).PROPFIND(path)
+            stat_info = OPFSClient(peer).stat(path)
+            if stat_info:
+                return OPFSStat(stat_info)
+            else:
+                return None
         except Exception, info:
             self.log("_stat_opfs: %s" % (info))
             return None

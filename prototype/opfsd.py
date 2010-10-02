@@ -1,9 +1,9 @@
 import os
 import sys
 import BaseHTTPServer
-import pickle
 from optparse import OptionParser
 from opfsutil import OPFSUtil
+
 
 class OPFSD(BaseHTTPServer.HTTPServer):
     def __init__(self, *args):
@@ -15,7 +15,9 @@ class OPFSD(BaseHTTPServer.HTTPServer):
             }
 
     def update_allow_addrs(self):
-        self.config['allow'] = OPFSUtil.get_peer_addrs(self.config['conf_file'])
+        self.config['allow'] = \
+            OPFSUtil.get_peer_addrs(self.config['conf_file'])
+
         if self.config['allow'] == None:
             OPFSUtil.create_peers_file(path)
             print "please setup %s" % (path)
@@ -24,40 +26,50 @@ class OPFSD(BaseHTTPServer.HTTPServer):
     def set_config(self, config):
         self.config = config
 
+
 class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_CONFUPDATE(self):
+        # for config reload
         if self.client_address[0] == '127.0.0.1':
             self.server.update_allow_addrs()
 
-    def do_PROPFIND(self):
-        if not self.is_peer_allowd():
-            self.send_forbidden()
-            return
+    def stat_response(self, path):
         # provide stat(2)
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
 
-        realpath = self.get_realpath(self.path)
+        realpath = self.get_realpath(path)
         try:
-            stat = os.stat(realpath)
-            self.wfile.write(pickle.dumps(stat))
-            print stat
+            st = os.stat(realpath)
+            self.wfile.write(OPFSUtil.stat2str(st))
+            print st
+            return
         except Exception, info:
             print info
-            self.wfile.write(pickle.dumps(None))
-
-    def do_GET(self):
-        if not self.is_peer_allowd():
-            self.send_forbidden()
             return
-        self.parse_parameter()
-        # provide read(2)/readdir(3)
+
+    def readdir_response(self, path):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
 
         realpath = self.get_realpath(self.actual_path)
+
+        if not os.path.isdir(realpath):
+            pass
+        # get dir list and write 1 entry 1 line
+        dirlist = "\n".join(os.listdir(realpath))
+        self.wfile.write(dirlist)
+        print dirlist
+
+    def read_response(self, path):
+        # provide read(2)/readdir(3)
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+
+        realpath = self.get_realpath(path)
 
         if os.path.isfile(realpath):
             # get file data and write
@@ -76,11 +88,20 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 self.wfile.write(f.read())
                 print "read all"
 
-        elif os.path.isdir(realpath):
-            # get dir list and write 1 entry 1 line
-            dirlist = "\n".join(os.listdir(realpath))
-            self.wfile.write(dirlist)
-            print dirlist
+    def do_GET(self):
+        if not self.is_peer_allowd():
+            self.send_forbidden()
+            return
+        self.parse_parameter()
+
+        if self.query['mode'] == 'stat':
+            self.stat_response(self.actual_path)
+        elif self.query['mode'] == 'readdir':
+            self.readdir_response(self.actual_path)
+        elif self.query['mode'] == 'read':
+            self.read_response(self.actual_path)
+
+        return
 
     def send_forbidden(self):
         self.send_response(403)
@@ -94,12 +115,12 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return basedir + os.path.abspath(path)
 
     def parse_parameter(self):
-        self.actual_path = self.path
+        self.actual_path = os.path.abspath(self.path)
         self.query = {}
         query_pos = self.path.find('?')
         if query_pos != -1:
             # '?' found
-            self.actual_path = self.path[0:query_pos]
+            self.actual_path = os.path.abspath(self.path[0:query_pos])
             if len(self.path) == query_pos + 1:
                 # '?' found but last char is '?' ex. "/hoge?"
                 print "illegal querystring"
@@ -115,7 +136,7 @@ def sighup_handler(signum, frame):
     # update allow list when sighup received
     update_allow_addrs()
 
-    
+
 def run(server_class=OPFSD,
         handler_class=BaseHTTPServer.BaseHTTPRequestHandler):
 
@@ -138,7 +159,6 @@ def run(server_class=OPFSD,
 
     server_address = ('', int(options.port))
     print "listen port: %s" % (options.port)
-
 
     httpd = server_class(server_address, OPFSDHandler)
     httpd.set_config({

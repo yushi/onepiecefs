@@ -1,6 +1,5 @@
 import syslog
-from httplib import HTTPConnection
-import pickle
+from urllib import urlopen
 import stat
 
 
@@ -11,40 +10,38 @@ def log(message):
 
 class OPFSClient:
     def __init__(self, target):
-        try:
-            host, port = target.split(":")
-            self.host = host
-            self.port = int(port)
+        self.target = target
 
-        except Exception, info:
-            raise RuntimeError("OPFSClient parameter error: %s" % (info))
+    def read(self, path, size, offset):
+        param = {
+            'mode': 'read',
+            'size': str(size),
+            'offset': str(offset)
+            }
+        path = self._build_url(path, param)
 
-    def GET(self, path, size=None, offset=None):
-        if size != None and offset != None:
-            param = {
-                'size': str(size),
-                'offset': str(offset)
-                }
-            parh = self._build_url(path, param)
-            path = path + '?size=' + str(size) + '&offset=' + str(offset)
-        log("PATH")
-        log(path)
         return self.request('GET', path)
 
-    def PROPFIND(self, path):
-        ret = self.request('PROPFIND', path)
+    def readdir(self, path):
+        path = self._build_url(path, {'mode': 'readdir'})
+        ret = self.request('GET', path)
         if ret != "":
-            return pickle.loads(ret)
+            return ret
+        else:
+            return None
+
+    def stat(self, path):
+        path = self._build_url(path, {'mode': 'stat'})
+        ret = self.request('GET', path)
+        if ret != "":
+            return ret
         else:
             return None
 
     def request(self, method, path):
-        conn = HTTPConnection(self.host, self.port)
-        conn.request(method, path)
-        resp = conn.getresponse()
-        return resp.read()
+        return urlopen('http://' + self.target + path).read()
 
     def _build_url(self, url, param):
-        ret = url
-        return url + '?' + '&'.join(map(lambda key: key + '=' + param[key],
-                               param.keys()))
+        return url + '?' + '&'.join(
+            map(lambda key: key + '=' + param[key],
+                param.keys()))
