@@ -7,6 +7,8 @@ from optparse import OptionParser
 
 class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_PROPFIND(self):
+        if not self.is_peer_allowd():
+            return
         # provide stat(2)
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
@@ -22,6 +24,8 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.wfile.write(pickle.dumps(None))
 
     def do_GET(self):
+        if not self.is_peer_allowd():
+            return
         self.parse_parameter()
         # provide read(2)/readdir(3)
         self.send_response(200)
@@ -52,6 +56,9 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             dirlist = "\n".join(os.listdir(realpath))
             self.wfile.write(dirlist)
             print dirlist
+
+    def is_peer_allowd(self):
+        return self.client_address[0] in self.server.config['allow']
 
     def get_realpath(self, path):
         basedir = self.server.config['basedir']
@@ -96,6 +103,7 @@ def run(server_class=BaseHTTPServer.HTTPServer,
 
     httpd.config = {
         'basedir': basedir,
+        'allow': ['127.0.0.1']
         }
     httpd.serve_forever()
 

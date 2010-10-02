@@ -52,6 +52,7 @@ class OPFS(Fuse):
 
         except Exception, info:
             self.log("getattr error: %s" % (info))
+            return -errno.ENOENT
 
     def readdir(self, path, offset):
         try:

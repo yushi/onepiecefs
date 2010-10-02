@@ -15,6 +15,7 @@ class OPFSClient:
             host, port = target.split(":")
             self.host = host
             self.port = int(port)
+
         except Exception, info:
             raise RuntimeError("OPFSClient parameter error: %s" % (info))
 
