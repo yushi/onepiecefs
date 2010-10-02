@@ -1,13 +1,16 @@
 import os
 import sys
+import socket
 import BaseHTTPServer
 import pickle
 from optparse import OptionParser
+from opfsutil import OPFSUtil
 
 
 class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_PROPFIND(self):
         if not self.is_peer_allowd():
+            self.send_forbidden()
             return
         # provide stat(2)
         self.send_response(200)
@@ -25,6 +28,7 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def do_GET(self):
         if not self.is_peer_allowd():
+            self.send_forbidden()
             return
         self.parse_parameter()
         # provide read(2)/readdir(3)
@@ -56,6 +60,10 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             dirlist = "\n".join(os.listdir(realpath))
             self.wfile.write(dirlist)
             print dirlist
+
+    def send_forbidden(self):
+        self.send_response(403)
+        self.end_headers()
 
     def is_peer_allowd(self):
         return self.client_address[0] in self.server.config['allow']
@@ -91,6 +99,23 @@ def run(server_class=BaseHTTPServer.HTTPServer,
     parser.add_option("-d", "--debug", dest="debug",
                       help="listen port", default=False)
 
+    allow = ['127.0.0.1']
+    conf_file = "~/.opfs_peers"
+    conf_file = os.path.realpath(os.path.expanduser(conf_file))
+    if os.path.exists(conf_file):
+        peers = OPFSUtil.read_peers_file(conf_file)
+        for peer in peers:
+            host, port = peer.split(":")
+            for info in socket.getaddrinfo(host, port):
+                addr = info[4][0]
+                if not (addr in allow):
+                    allow.append(addr)
+
+    else:
+        OPFSUtil.create_peers_file(conf_file)
+        print "please setup %s" % (conf_file)
+        sys.exit(-1)
+
     (options, args) = parser.parse_args()
     server_address = ('', int(options.port))
     print "listen port: %s" % (options.port)
@@ -103,7 +128,7 @@ def run(server_class=BaseHTTPServer.HTTPServer,
 
     httpd.config = {
         'basedir': basedir,
-        'allow': ['127.0.0.1']
+        'allow': allow
         }
     httpd.serve_forever()
 

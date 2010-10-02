@@ -1,10 +1,10 @@
 import os
 import stat
 import errno
-import re
 import syslog
 import sys
 from opfsc import OPFSClient
+from opfsutil import OPFSUtil
 import syslog
 
 try:
@@ -36,6 +36,7 @@ class OPFS(Fuse):
             syslog.syslog(syslog.LOG_ALERT, message)
 
     def getattr(self, path):
+        self.log("getattr: %s" % (path))
         try:
             ret = None
 
@@ -55,12 +56,16 @@ class OPFS(Fuse):
             return -errno.ENOENT
 
     def readdir(self, path, offset):
+        self.log("readdir: %s" % (path))
         try:
             dirs = ['.', '..']
 
             # get direntry from all peers
             for peer in self.peers:
                 resp = self._readdir_opfs(path, peer)
+                if not resp:
+                    self.log("%s's response is invalid" % (peer))
+                    continue
                 for dirname in resp.split('\n'):
                     if not(dirname in dirs):
                         dirs.append(dirname)
@@ -72,6 +77,7 @@ class OPFS(Fuse):
             self.log("readdir error: %s" % (info))
 
     def open(self, path, flags):
+        self.log("open: %s" % (path))
         # open supports READONLY access
         try:
             if self._search_peer_by_path(path):
@@ -88,6 +94,7 @@ class OPFS(Fuse):
             self.log("open error: %s" % (info))
 
     def read(self, path, size, offset):
+        self.log("read: %s" % (path))
         try:
             peer = self._search_peer_by_path(path)
 
@@ -105,46 +112,38 @@ class OPFS(Fuse):
 
     def setup_peer(self):
         self.peers_file = os.path.realpath(os.path.expanduser(self.peers_file))
-        print self.peers_file
+        self.log("config file: %s" % (self.peers_file))
         if os.path.exists(self.peers_file):
-            self.peers = self.read_peers_file()
+            self.peers = OPFSUtil.read_peers_file(self.peers_file)
             if len(self.peers) == 0:
                 print "please setup %s" % (self.peers_file)
                 sys.exit(-1)
 
         else:
-            self.create_peers_file()
+            OPFSUtil.create_peers_file(self.peers_file)
             print "please setup %s" % (self.peers_file)
             sys.exit(-1)
-
-    def create_peers_file(self):
-        f = open(self.peers_file, 'w')
-        f.write("#please write 1 entry 1 file (ex. localhost:5656)\n")
-        f.close
-
-    def read_peers_file(self):
-        # '#' line is comment
-        regex = re.compile("\s*[^#]\S+")
-        f = open(self.peers_file, 'r')
-        data = f.read()
-        peers = []
-        for l in data.split("\n"):
-            if regex.match(l):
-                peers.append(l)
-        return peers
 
     def _is_readonly(self, flags):
         accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
         return (flags & accmode) == os.O_RDONLY
 
     def _readdir_opfs(self, path, peer):
-        return OPFSClient(peer).GET(path)
+        try:
+            return OPFSClient(peer).GET(path)
+        except Exception, info:
+            self.log("_readdir_opfs: %s" % (info))
+            return None
 
     def _read_opfs(self, path, size, offset, peer):
         return OPFSClient(peer).GET(path, size, offset)
 
     def _stat_opfs(self, path, peer):
-        return OPFSClient(peer).PROPFIND(path)
+        try:
+            return OPFSClient(peer).PROPFIND(path)
+        except Exception, info:
+            self.log("_stat_opfs: %s" % (info))
+            return None
 
     def _file_size_opfs(self, path, peer):
         st = self._stat_opfs(path, peer)
