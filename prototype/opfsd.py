@@ -26,7 +26,8 @@ class OPFSD(BaseHTTPServer.HTTPServer):
 
 class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_CONFUPDATE(self):
-        self.server.update_allow_addrs()
+        if self.client_address[0] == '127.0.0.1':
+            self.server.update_allow_addrs()
 
     def do_PROPFIND(self):
         if not self.is_peer_allowd():
