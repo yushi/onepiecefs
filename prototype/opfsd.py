@@ -1,13 +1,33 @@
 import os
 import sys
-import socket
 import BaseHTTPServer
 import pickle
 from optparse import OptionParser
 from opfsutil import OPFSUtil
 
+class OPFSD(BaseHTTPServer.HTTPServer):
+    def __init__(self, *args):
+        BaseHTTPServer.HTTPServer.__init__(self, *args)
+        self.config = {
+            'allow': None,
+            'conf_file': None,
+            'basedir': None
+            }
+
+    def update_allow_addrs(self):
+        self.config['allow'] = OPFSUtil.get_peer_addrs(self.config['conf_file'])
+        if self.config['allow'] == None:
+            OPFSUtil.create_peers_file(path)
+            print "please setup %s" % (path)
+            sys.exit(-1)
+
+    def set_config(self, config):
+        self.config = config
 
 class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    def do_CONFUPDATE(self):
+        self.server.update_allow_addrs()
+
     def do_PROPFIND(self):
         if not self.is_peer_allowd():
             self.send_forbidden()
@@ -90,7 +110,12 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     self.query[key] = val
 
 
-def run(server_class=BaseHTTPServer.HTTPServer,
+def sighup_handler(signum, frame):
+    # update allow list when sighup received
+    update_allow_addrs()
+
+    
+def run(server_class=OPFSD,
         handler_class=BaseHTTPServer.BaseHTTPRequestHandler):
 
     parser = OptionParser()
@@ -98,38 +123,31 @@ def run(server_class=BaseHTTPServer.HTTPServer,
                       help="listen port", default="5656")
     parser.add_option("-d", "--debug", dest="debug",
                       help="listen port", default=False)
-
-    allow = ['127.0.0.1']
-    conf_file = "~/.opfs_peers"
-    conf_file = os.path.realpath(os.path.expanduser(conf_file))
-    if os.path.exists(conf_file):
-        peers = OPFSUtil.read_peers_file(conf_file)
-        for peer in peers:
-            host, port = peer.split(":")
-            for info in socket.getaddrinfo(host, port):
-                addr = info[4][0]
-                if not (addr in allow):
-                    allow.append(addr)
-
-    else:
-        OPFSUtil.create_peers_file(conf_file)
-        print "please setup %s" % (conf_file)
-        sys.exit(-1)
+    parser.add_option("-c", "--conf", dest="conf_file",
+                      help="config file for peers", default="~/.opfs_peers")
 
     (options, args) = parser.parse_args()
-    server_address = ('', int(options.port))
-    print "listen port: %s" % (options.port)
-    httpd = server_class(server_address, OPFSDHandler)
 
     if len(args) != 1:
         print "usage: python opfsd.py <publish path>"
         sys.exit(-1)
+
+    conf_file = os.path.realpath(os.path.expanduser(options.conf_file))
     basedir = args.pop()
 
-    httpd.config = {
-        'basedir': basedir,
-        'allow': allow
-        }
+    server_address = ('', int(options.port))
+    print "listen port: %s" % (options.port)
+
+
+    httpd = server_class(server_address, OPFSDHandler)
+    httpd.set_config({
+            'basedir': basedir,
+            'allow': None,
+            'conf_file': conf_file
+            })
+
+    httpd.update_allow_addrs()
+
     httpd.serve_forever()
 
 run()

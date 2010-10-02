@@ -1,5 +1,6 @@
 import re
-
+import os
+import socket
 
 class OPFSUtil:
     @classmethod
@@ -19,3 +20,19 @@ class OPFSUtil:
             if regex.match(l):
                 peers.append(l)
         return peers
+
+    @classmethod
+    def get_peer_addrs(self, path):
+        addrs = ['127.0.0.1']
+        if os.path.exists(path):
+            peers = OPFSUtil.read_peers_file(path)
+            for peer in peers:
+                host, port = peer.split(":")
+                for info in socket.getaddrinfo(host, port):
+                    addr = info[4][0]
+                    if not (addr in addrs):
+                        addrs.append(addr)
+        else:
+            addrs = None
+
+        return addrs
