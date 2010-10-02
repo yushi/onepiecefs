@@ -1,5 +1,9 @@
-import os, stat, errno, re
-import syslog, sys
+import os
+import stat
+import errno
+import re
+import syslog
+import sys
 from opfsc import OPFSClient
 import syslog
 
@@ -12,14 +16,11 @@ from fuse import Fuse
 
 
 if not hasattr(fuse, '__version__'):
-    raise RuntimeError, \
-        "your fuse-py doesn't know of fuse.__version__, probably it's too old."
+    raise RuntimeError(
+        "your fuse-py doesn't know of fuse. \
+__version__, probably it's too old.")
 
 fuse.fuse_python_api = (0, 2)
-
-def log(message):
-    syslog.openlog("OPFS")
-    syslog.syslog(syslog.LOG_ALERT, message)
 
 
 class OPFS(Fuse):
@@ -27,73 +28,79 @@ class OPFS(Fuse):
     def __init__(self, *args, **kw):
         fuse.Fuse.__init__(self, *args, **kw)
         self.peers_file = '~/.opfs_peers'
+        self.debug = False
+
+    def log(self, message):
+        if self.debug:
+            syslog.openlog("OPFS")
+            syslog.syslog(syslog.LOG_ALERT, message)
 
     def getattr(self, path):
-        ret = None
         try:
+            ret = None
+
+            # get attribute from all peers
             for peer in self.peers:
-                log(peer)
-                ret = OPFSClient(peer).PROPFIND(path)
+                ret = self._stat_opfs(path, peer)
                 if ret:
                     break
-        except Exception, info:
-            log("getattr error: %s" % (info))
 
-        if ret:
-            return ret
-        else:
-            return -errno.ENOENT
+            if ret:
+                return ret
+            else:
+                return -errno.ENOENT
+
+        except Exception, info:
+            self.log("getattr error: %s" % (info))
 
     def readdir(self, path, offset):
-        dirs = ['.', '..']
         try:
+            dirs = ['.', '..']
+
+            # get direntry from all peers
             for peer in self.peers:
-                resp = OPFSClient(peer).GET(path)
+                resp = self._readdir_opfs(path, peer)
                 for dirname in resp.split('\n'):
-                    dirs.append(dirname)
+                    if not(dirname in dirs):
+                        dirs.append(dirname)
 
             for r in dirs:
                 yield fuse.Direntry(r)
+
         except Exception, info:
-            log("readdir error: %s" % (info))
+            self.log("readdir error: %s" % (info))
 
     def open(self, path, flags):
+        # open supports READONLY access
         try:
-            for peer in self.peers:
-                ret = OPFSClient(peer).PROPFIND(path)
-                if ret != None:
-                    break
-        except Exception, info:
-            log("open error: %s" % (info))
-
-        if ret:
-            accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
-            if (flags & accmode) != os.O_RDONLY:
-                return -errno.EACCES
+            if self._search_peer_by_path(path):
+                if self._is_readonly(flags):
+                    # ok
+                    return
+                else:
+                    # write not support
+                    return -errno.EACCES
             else:
-                return
-        else:
-            return -errno.ENOENT
+                return -errno.ENOENT
+
+        except Exception, info:
+            self.log("open error: %s" % (info))
 
     def read(self, path, size, offset):
         try:
-            peer = None
-            for candidate in self.peers:
-                ret = OPFSClient(candidate).PROPFIND(path)
-                if ret != None:
-                    peer = candidate
+            peer = self._search_peer_by_path(path)
 
-            filesize = self._file_size(path, peer)
-            if filesize != None:
+            filesize = self._file_size_opfs(path, peer)
+            if filesize:
                 if offset < filesize:
-                    return OPFSClient(peer).GET(path, size, offset)
+                    return self._read_opfs(path, size, offset, peer)
                 else:
+                    # invalid offset
                     return ''
+            return -errno.ENOENT
 
         except Exception, info:
-            log("read error: %s" % (info))
-
-        return -errno.ENOENT
+            self.log("read error: %s" % (info))
 
     def setup_peer(self):
         self.peers_file = os.path.realpath(os.path.expanduser(self.peers_file))
@@ -108,34 +115,52 @@ class OPFS(Fuse):
             self.create_peers_file()
             print "please setup %s" % (self.peers_file)
             sys.exit(-1)
-        
+
     def create_peers_file(self):
         f = open(self.peers_file, 'w')
-        f.write("#please write 1 entry 1 file\n#localhost:8000\n")
+        f.write("#please write 1 entry 1 file (ex. localhost:5656)\n")
         f.close
 
     def read_peers_file(self):
+        # '#' line is comment
+        regex = re.compile("\s*[^#]\S+")
         f = open(self.peers_file, 'r')
-        data =f.read()
+        data = f.read()
         peers = []
         for l in data.split("\n"):
-            if re.compile("\s*[^#]\S+").match(l):
+            if regex.match(l):
                 peers.append(l)
         return peers
-        
-        
-    def _stat(self, path, peer):
+
+    def _is_readonly(self, flags):
+        accmode = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
+        return (flags & accmode) == os.O_RDONLY
+
+    def _readdir_opfs(self, path, peer):
+        return OPFSClient(peer).GET(path)
+
+    def _read_opfs(self, path, size, offset, peer):
+        return OPFSClient(peer).GET(path, size, offset)
+
+    def _stat_opfs(self, path, peer):
         return OPFSClient(peer).PROPFIND(path)
 
-    def _file_size(self, path, peer):
-        st = self._stat(path, peer)
+    def _file_size_opfs(self, path, peer):
+        st = self._stat_opfs(path, peer)
         if st:
             return st.st_size
         else:
             return None
 
+    def _search_peer_by_path(self, path):
+        for peer in self.peers:
+            st = self._stat_opfs(path, peer)
+            if st:
+                return peer
+
+
 def main():
-    usage="""
+    usage = """
 OnePiece FS
 
 """ + Fuse.fusage
@@ -144,6 +169,8 @@ OnePiece FS
                   dash_s_do='setsingle')
     server.parser.add_option(mountopt="peers", metavar="filename", default='',
                              help="peer address and port")
+    server.parser.add_option(mountopt="debug", metavar="", default='False',
+                             help="debug mode")
 
     server.parse(values=server, errex=1)
     server.setup_peer()

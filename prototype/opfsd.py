@@ -4,6 +4,7 @@ import BaseHTTPServer
 import pickle
 from optparse import OptionParser
 
+
 class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_PROPFIND(self):
         # provide stat(2)
@@ -20,15 +21,13 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             print info
             self.wfile.write(pickle.dumps(None))
 
-
-        
     def do_GET(self):
         self.parse_parameter()
         # provide read(2)/readdir(3)
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
-        
+
         realpath = self.get_realpath(self.actual_path)
 
         if os.path.isfile(realpath):
@@ -57,7 +56,7 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def get_realpath(self, path):
         basedir = self.server.config['basedir']
         return basedir + os.path.abspath(path)
-    
+
     def parse_parameter(self):
         self.actual_path = self.path
         self.query = {}
@@ -70,23 +69,26 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 print "illegal querystring"
             else:
                 #  parse querystring
-                query_str = self.path[query_pos+1::]
+                query_str = self.path[query_pos + 1::]
                 for q in query_str.split('&'):
                     key, val = q.split('=')
                     self.query[key] = val
-        
+
+
 def run(server_class=BaseHTTPServer.HTTPServer,
         handler_class=BaseHTTPServer.BaseHTTPRequestHandler):
-    
+
     parser = OptionParser()
     parser.add_option("-p", "--port", dest="port",
-                      help="listen port", default="8000")
+                      help="listen port", default="5656")
+    parser.add_option("-d", "--debug", dest="debug",
+                      help="listen port", default=False)
 
     (options, args) = parser.parse_args()
     server_address = ('', int(options.port))
     print "listen port: %s" % (options.port)
     httpd = server_class(server_address, OPFSDHandler)
-    
+
     if len(args) != 1:
         print "usage: python opfsd.py <publish path>"
         sys.exit(-1)
