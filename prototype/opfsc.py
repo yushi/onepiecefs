@@ -1,4 +1,7 @@
 import syslog
+import socket
+timeout = 5
+socket.setdefaulttimeout(timeout)
 from urllib import urlopen
 import stat
 
