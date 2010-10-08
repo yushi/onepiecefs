@@ -115,9 +115,12 @@ class OPFS(Fuse):
         self.peers_file = os.path.realpath(os.path.expanduser(self.peers_file))
         self.log("config file: %s" % (self.peers_file))
         if os.path.exists(self.peers_file):
-            self.peers = OPFSUtil.read_peers_file(self.peers_file)
-            # TODO connect check
-
+            candidates = OPFSUtil.read_peers_file(self.peers_file)
+            self.peers = []
+            for peer in candidates:
+                if OPFSClient(peer).is_alive():
+                    self.peers.append(peer)
+            
             if len(self.peers) == 0:
                 print "please setup %s" % (self.peers_file)
                 sys.exit(-1)

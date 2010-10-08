@@ -1,7 +1,7 @@
 import syslog
 import socket
-timeout = 5
-socket.setdefaulttimeout(timeout)
+default_timeout = 5
+socket.setdefaulttimeout(default_timeout)
 from urllib import urlopen
 import stat
 
@@ -14,6 +14,21 @@ def log(message):
 class OPFSClient:
     def __init__(self, target):
         self.target = target
+
+    def is_alive(self):
+        global default_timeout
+        ret = False
+        host, port = self.target.split(':')
+
+        try:
+            socket.setdefaulttimeout(1)
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((host, int(port)))
+            ret = True
+        except Exception:
+            pass
+        socket.setdefaulttimeout(default_timeout)
+        return ret
 
     def read(self, path, size, offset):
         param = {
