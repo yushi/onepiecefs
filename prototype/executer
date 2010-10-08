@@ -4,11 +4,15 @@ BASE=`dirname $0`
 PROG=`basename $0`
 
 OPFS_PYTHON="${BASE}/../python27/bin/python"
+IFS="
+"
 
 if [ -x ${OPFS_PYTHON} ];then
     #using opfs python
+    echo ${OPFS_PYTHON} ${BASE}/${PROG}.py $*
     ${OPFS_PYTHON} ${BASE}/${PROG}.py $*
 else
+
     #using system python
     python ${BASE}/${PROG}.py $*
 fi
