@@ -3,7 +3,7 @@ import sys
 import BaseHTTPServer
 from optparse import OptionParser
 from opfsutil import OPFSUtil
-
+import urllib
 
 class OPFSD(BaseHTTPServer.HTTPServer):
     def __init__(self, *args):
@@ -115,6 +115,7 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return basedir + os.path.abspath(path)
 
     def parse_parameter(self):
+        self.path = urllib.unquote(self.path)
         self.actual_path = os.path.abspath(self.path)
         self.query = {}
         query_pos = self.path.find('?')
