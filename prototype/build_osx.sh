@@ -27,7 +27,7 @@ tar jxf Python-2.7.tar.bz2
 cd Python-2.7
 ./configure --prefix=${INSTALL_PATH}/python27
 make && make install
-cd ..
+cd ${WORK_DIR}
 
 export CFLAGS_TMP=$CFLAGS
 export CFLAGS="${CFLAGS} -I${WORK_DIR}/include"
@@ -35,7 +35,7 @@ wget $FUSE_PYTHON_URL
 tar zxf fuse-python-0.2.tar.gz
 cd fuse-python-0.2
 ${INSTALL_PATH}/python27/bin/python setup.py install
-cd ..
+cd ${WORK_DIR}
 
 rm -rf ${WORK_DIR}
 export CFLAGS=$CFLAGS_TMP
