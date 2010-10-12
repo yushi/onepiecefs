@@ -5,6 +5,15 @@ from optparse import OptionParser
 from opfsutil import OPFSUtil
 import urllib
 
+debug = False
+
+
+def debug_print(msg):
+    global debug
+    if debug:
+        print msg
+
+
 class OPFSD(BaseHTTPServer.HTTPServer):
     def __init__(self, *args):
         BaseHTTPServer.HTTPServer.__init__(self, *args)
@@ -28,6 +37,13 @@ class OPFSD(BaseHTTPServer.HTTPServer):
 
 
 class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        global debug
+        if debug:
+            BaseHTTPServer.BaseHTTPRequestHandler.log_message(self,
+                                                              format,
+                                                              *args)
+
     def do_CONFUPDATE(self):
         # for config reload
         if self.client_address[0] == '127.0.0.1':
@@ -43,10 +59,10 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         try:
             st = os.stat(realpath)
             self.wfile.write(OPFSUtil.stat2str(st))
-            print st
+            debug_print(st)
             return
         except Exception, info:
-            print info
+            debug_print(info)
             return
 
     def readdir_response(self, path):
@@ -61,7 +77,7 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # get dir list and write 1 entry 1 line
         dirlist = "\n".join(os.listdir(realpath))
         self.wfile.write(dirlist)
-        print dirlist
+        debug_print(dirlist)
 
     def read_response(self, path):
         # provide read(2)/readdir(3)
@@ -82,11 +98,11 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             if 'size' in self.query:
                 # read by size
                 self.wfile.write(f.read(int(self.query['size'])))
-                print "read part"
+                debug_print("read part")
             else:
                 # read all
                 self.wfile.write(f.read())
-                print "read all"
+                debug_print("read all")
 
     def do_GET(self):
         if not self.is_peer_allowd():
@@ -124,7 +140,7 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.actual_path = os.path.abspath(self.path[0:query_pos])
             if len(self.path) == query_pos + 1:
                 # '?' found but last char is '?' ex. "/hoge?"
-                print "illegal querystring"
+                debug_print("illegal querystring")
             else:
                 #  parse querystring
                 query_str = self.path[query_pos + 1::]
@@ -144,12 +160,14 @@ def run(server_class=OPFSD,
     parser = OptionParser()
     parser.add_option("-p", "--port", dest="port",
                       help="listen port", default="5656")
-    parser.add_option("-d", "--debug", dest="debug",
-                      help="listen port", default=False)
+    parser.add_option("-d", "--debug", dest="debug", action="store_true",
+                      help="debug")
     parser.add_option("-c", "--conf", dest="conf_file",
                       help="config file for peers", default="~/.opfs_peers")
 
     (options, args) = parser.parse_args()
+    global debug
+    debug = options.debug
 
     if len(args) != 1:
         print "usage: python opfsd.py <publish path>"
@@ -159,7 +177,7 @@ def run(server_class=OPFSD,
     basedir = args.pop()
 
     server_address = ('', int(options.port))
-    print "listen port: %s" % (options.port)
+    debug_print("listen port: %s" % (options.port))
 
     httpd = server_class(server_address, OPFSDHandler)
     httpd.set_config({

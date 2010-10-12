@@ -120,7 +120,7 @@ class OPFS(Fuse):
             for peer in candidates:
                 if OPFSClient(peer).is_alive():
                     self.peers.append(peer)
-            
+
             if len(self.peers) == 0:
                 print "please setup %s" % (self.peers_file)
                 sys.exit(-1)
