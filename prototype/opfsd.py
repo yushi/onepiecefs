@@ -80,6 +80,7 @@ class OPFSDHandler(tornado.web.RequestHandler):
                 debug_print("read all")
 
     def get(self, *args, **kargs):
+        debug_print(self.request)
         if not self.is_peer_allowd():
             self.send_forbidden()
             return
@@ -109,13 +110,13 @@ class OPFSDHandler(tornado.web.RequestHandler):
         return basedir + os.path.abspath(path)
 
     def parse_parameter(self):
-        self.path = urllib.unquote(self.request.uri)
-        self.actual_path = os.path.abspath(self.path)
+        self.path = self.request.uri
+        self.actual_path = urllib.unquote(os.path.abspath(self.path))
         self.query = {}
         query_pos = self.path.find('?')
         if query_pos != -1:
             # '?' found
-            self.actual_path = os.path.abspath(self.path[0:query_pos])
+            self.actual_path = urllib.unquote(os.path.abspath(self.path[0:query_pos]))
             if len(self.path) == query_pos + 1:
                 # '?' found but last char is '?' ex. "/hoge?"
                 debug_print("illegal querystring")

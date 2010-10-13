@@ -3,6 +3,7 @@ import stat
 import errno
 import syslog
 import sys
+from urllib2 import quote
 from opfsc import OPFSClient
 from opfsutil import OPFSUtil, OPFSStat
 import syslog
@@ -28,7 +29,17 @@ class OPFS(Fuse):
     def __init__(self, *args, **kw):
         fuse.Fuse.__init__(self, *args, **kw)
         self.peers_file = '~/.opfs_peers'
+        self.peer_client_map = {}
         self.debug = False
+
+    def get_opfs_client(self, peer):
+        ret = None
+        if peer in self.peer_client_map:
+            ret = self.peer_client_map[peer]
+        else:
+            ret = OPFSClient(peer)
+            self.peer_client_map[peer] = ret
+        return ret
 
     def log(self, message):
         if self.debug:
@@ -118,7 +129,7 @@ class OPFS(Fuse):
             candidates = OPFSUtil.read_peers_file(self.peers_file)
             self.peers = []
             for peer in candidates:
-                if OPFSClient(peer).is_alive():
+                if self.get_opfs_client(peer).is_alive():
                     self.peers.append(peer)
 
             if len(self.peers) == 0:
@@ -135,18 +146,21 @@ class OPFS(Fuse):
         return (flags & accmode) == os.O_RDONLY
 
     def _readdir_opfs(self, path, peer):
+        path = path
         try:
-            return OPFSClient(peer).readdir(path)
+            return self.get_opfs_client(peer).readdir(path)
         except Exception, info:
             self.log("_readdir_opfs: %s" % (info))
             return None
 
     def _read_opfs(self, path, size, offset, peer):
-        return OPFSClient(peer).read(path, size, offset)
+        path = path
+        return self.get_opfs_client(peer).read(path, size, offset)
 
     def _stat_opfs(self, path, peer):
+        path = path
         try:
-            stat_info = OPFSClient(peer).stat(path)
+            stat_info = self.get_opfs_client(peer).stat(path)
             if stat_info:
                 return OPFSStat(stat_info)
             else:
@@ -156,6 +170,7 @@ class OPFS(Fuse):
             return None
 
     def _file_size_opfs(self, path, peer):
+        path = path
         st = self._stat_opfs(path, peer)
         if st:
             return st.st_size

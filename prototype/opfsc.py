@@ -15,11 +15,11 @@ def log(message):
 class OPFSClient:
     def __init__(self, target):
         self.target = target
+        self.keepalive_handler = HTTPHandler()
+        self.opener = urllib2.build_opener(self.keepalive_handler)
+        urllib2.install_opener(self.opener)
 
     def urlopen(self, url):
-        keepalive_handler = HTTPHandler()
-        opener = urllib2.build_opener(keepalive_handler)
-        urllib2.install_opener(opener)
         return urllib2.urlopen(url)
         
     def is_alive(self):
@@ -43,28 +43,26 @@ class OPFSClient:
             'size': str(size),
             'offset': str(offset)
             }
-        path = self._build_url(path, param)
 
-        return self.request('GET', path)
+        return self.request('GET', path, param)
 
     def readdir(self, path):
-        path = self._build_url(path, {'mode': 'readdir'})
-        ret = self.request('GET', path)
+        ret = self.request('GET', path, {'mode': 'readdir'})
         if ret != "":
             return ret
         else:
             return None
 
     def stat(self, path):
-        path = self._build_url(path, {'mode': 'stat'})
-        ret = self.request('GET', path)
+        ret = self.request('GET', path, {'mode': 'stat'})
         if ret != "":
             return ret
         else:
             return None
 
-    def request(self, method, path):
-        return self.urlopen('http://' + self.target + urllib2.quote(path)).read()
+    def request(self, method, path, param):
+        path = self._build_url(urllib2.quote(path), param)
+        return self.urlopen('http://' + self.target + path).read()
 
     def _build_url(self, url, param):
         return url + '?' + '&'.join(
