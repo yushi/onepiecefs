@@ -1,12 +1,14 @@
 import os
 import sys
-import BaseHTTPServer
+import tornado.httpserver
+import tornado.ioloop
+import tornado.web
 from optparse import OptionParser
 from opfsutil import OPFSUtil
 import urllib
 
 debug = False
-
+config = {}
 
 def debug_print(msg):
     global debug
@@ -14,51 +16,26 @@ def debug_print(msg):
         print msg
 
 
-class OPFSD(BaseHTTPServer.HTTPServer):
-    def __init__(self, *args):
-        BaseHTTPServer.HTTPServer.__init__(self, *args)
-        self.config = {
-            'allow': None,
-            'conf_file': None,
-            'basedir': None
-            }
-
-    def update_allow_addrs(self):
-        self.config['allow'] = \
-            OPFSUtil.get_peer_addrs(self.config['conf_file'])
-
-        if self.config['allow'] == None:
-            OPFSUtil.create_peers_file(path)
-            print "please setup %s" % (path)
-            sys.exit(-1)
-
-    def set_config(self, config):
-        self.config = config
+def update_allow_addrs():
+    config['allow'] = \
+        OPFSUtil.get_peer_addrs(config['conf_file'])
 
 
-class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        global debug
-        if debug:
-            BaseHTTPServer.BaseHTTPRequestHandler.log_message(self,
-                                                              format,
-                                                              *args)
-
+class OPFSDHandler(tornado.web.RequestHandler):
     def do_CONFUPDATE(self):
         # for config reload
         if self.client_address[0] == '127.0.0.1':
-            self.server.update_allow_addrs()
+            update_allow_addrs()
 
     def stat_response(self, path):
         # provide stat(2)
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
+        self.set_status(200)
+        self.set_header('Content-type', 'text/plain')
 
         realpath = self.get_realpath(path)
         try:
             st = os.stat(realpath)
-            self.wfile.write(OPFSUtil.stat2str(st))
+            self.write(OPFSUtil.stat2str(st))
             debug_print(st)
             return
         except Exception, info:
@@ -66,9 +43,8 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             return
 
     def readdir_response(self, path):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
+        self.set_status(200)
+        self.set_header('Content-type', 'text/plain')
 
         realpath = self.get_realpath(self.actual_path)
 
@@ -76,14 +52,13 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             pass
         # get dir list and write 1 entry 1 line
         dirlist = "\n".join(os.listdir(realpath))
-        self.wfile.write(dirlist)
+        self.write(dirlist)
         debug_print(dirlist)
 
     def read_response(self, path):
         # provide read(2)/readdir(3)
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
+        self.set_status(200)
+        self.set_header('Content-type', 'text/plain')
 
         realpath = self.get_realpath(path)
 
@@ -97,18 +72,21 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 f.seek(int(self.query['offset']))
             if 'size' in self.query:
                 # read by size
-                self.wfile.write(f.read(int(self.query['size'])))
+                self.write(f.read(int(self.query['size'])))
                 debug_print("read part")
             else:
                 # read all
-                self.wfile.write(f.read())
+                self.write(f.read())
                 debug_print("read all")
 
-    def do_GET(self):
+    def get(self, *args, **kargs):
         if not self.is_peer_allowd():
             self.send_forbidden()
             return
         self.parse_parameter()
+
+        if not 'mode' in self.query:
+            return
 
         if self.query['mode'] == 'stat':
             self.stat_response(self.actual_path)
@@ -117,21 +95,21 @@ class OPFSDHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         elif self.query['mode'] == 'read':
             self.read_response(self.actual_path)
 
+
         return
 
     def send_forbidden(self):
-        self.send_response(403)
-        self.end_headers()
+        self.set_status(403)
 
     def is_peer_allowd(self):
-        return self.client_address[0] in self.server.config['allow']
+        return self.request.remote_ip in config['allow']
 
     def get_realpath(self, path):
-        basedir = self.server.config['basedir']
+        basedir = config['basedir']
         return basedir + os.path.abspath(path)
 
     def parse_parameter(self):
-        self.path = urllib.unquote(self.path)
+        self.path = urllib.unquote(self.request.uri)
         self.actual_path = os.path.abspath(self.path)
         self.query = {}
         query_pos = self.path.find('?')
@@ -154,9 +132,8 @@ def sighup_handler(signum, frame):
     update_allow_addrs()
 
 
-def run(server_class=OPFSD,
-        handler_class=BaseHTTPServer.BaseHTTPRequestHandler):
-
+def run(handler_class=OPFSDHandler):
+    global config
     parser = OptionParser()
     parser.add_option("-p", "--port", dest="port",
                       help="listen port", default="5656")
@@ -176,18 +153,26 @@ def run(server_class=OPFSD,
     conf_file = os.path.realpath(os.path.expanduser(options.conf_file))
     basedir = args.pop()
 
-    server_address = ('', int(options.port))
+    #server_address = ('', int(options.port))
     debug_print("listen port: %s" % (options.port))
 
-    httpd = server_class(server_address, OPFSDHandler)
-    httpd.set_config({
-            'basedir': basedir,
-            'allow': None,
-            'conf_file': conf_file
-            })
+    application = tornado.web.Application([
+            (r".*", handler_class),
+            ])
 
-    httpd.update_allow_addrs()
+    config = {
+        'basedir': basedir,
+        'allow': None,
+        'conf_file': conf_file
+            }
+    update_allow_addrs()
+    if config['allow'] == None:
+        OPFSUtil.create_peers_file(path)
+        print "please setup %s" % (path)
+        sys.exit(-1)
 
-    httpd.serve_forever()
+    http_server = tornado.httpserver.HTTPServer(application)
+    http_server.listen(int(options.port))
+    tornado.ioloop.IOLoop.instance().start()
 
 run()
