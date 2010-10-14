@@ -16,6 +16,9 @@ def log(message):
 class OPFSClient:
     def __init__(self, target):
         self.target = target
+        self.setup_keepalive()
+
+    def setup_keepalive(self):
         self.keepalive_handler = HTTPHandler()
         self.opener = urllib2.build_opener(self.keepalive_handler)
         urllib2.install_opener(self.opener)
@@ -31,7 +34,7 @@ class OPFSClient:
             retry -= 1
 
         return None
-        
+
     def is_alive(self):
         global default_timeout
         ret = False

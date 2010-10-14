@@ -5,10 +5,11 @@ import tornado.ioloop
 import tornado.web
 from optparse import OptionParser
 from opfsutil import OPFSUtil
-import urllib
+from urllib import unquote
 
 debug = False
 config = {}
+
 
 def debug_print(msg):
     global debug
@@ -96,7 +97,6 @@ class OPFSDHandler(tornado.web.RequestHandler):
         elif self.query['mode'] == 'read':
             self.read_response(self.actual_path)
 
-
         return
 
     def send_forbidden(self):
@@ -111,12 +111,13 @@ class OPFSDHandler(tornado.web.RequestHandler):
 
     def parse_parameter(self):
         self.path = self.request.uri
-        self.actual_path = urllib.unquote(os.path.abspath(self.path))
+        self.actual_path = unquote(os.path.abspath(self.path))
         self.query = {}
         query_pos = self.path.find('?')
         if query_pos != -1:
             # '?' found
-            self.actual_path = urllib.unquote(os.path.abspath(self.path[0:query_pos]))
+            self.actual_path = unquote(
+                os.path.abspath(self.path[0:query_pos]))
             if len(self.path) == query_pos + 1:
                 # '?' found but last char is '?' ex. "/hoge?"
                 debug_print("illegal querystring")
