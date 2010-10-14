@@ -3,7 +3,8 @@ INSTALL_PATH=/opt/opfs
 PWD=`pwd`
 WORK_DIR=${PWD}/opfsbuild
 PYTHON_DL_URL="http://www.python.org/ftp/python/2.7/Python-2.7.tar.bz2"
-FUSE_PYTHON_URL="http://pypi.python.org/packages/source/f/fuse-python/fuse-python-0.2.tar.gz#md5=68be744e71a42cd8a92905a49f346278"
+SETUPTOOLS_URL='http://pypi.python.org/packages/2.7/s/setuptools/setuptools-0.6c11-py2.7.egg#md5=fe1f997bc722265116870bc7919059ea'
+PIP_URL='http://pypi.python.org/packages/source/p/pip/pip-0.8.1.tar.gz#md5=5d40614774781b118dd3f10c0d038cbc'
 
 mkdir -p /opt/opfs
 if [ $? -eq 1 ];then
@@ -29,16 +30,26 @@ cd Python-2.7
 make && make install
 cd ${WORK_DIR}
 
+wget ${SETUPTOOLS_URL} 
+PYTHONPATH=${INSTALL_PATH}/python27/lib/python2.7/site-packages sh setuptools-0.6c11-py2.7.egg --prefix=${INSTALL_PATH}/python27
+
+wget ${PIP_URL}
+tar zxvf pip-0.8.1.tar.gz
+cd pip-0.8.1
+${INSTALL_PATH}/python27/bin/python setup.py install
+
 export CFLAGS_TMP=$CFLAGS
 export CFLAGS="${CFLAGS} -I${WORK_DIR}/include"
-wget $FUSE_PYTHON_URL
-tar zxf fuse-python-0.2.tar.gz
-cd fuse-python-0.2
-${INSTALL_PATH}/python27/bin/python setup.py install
+${INSTALL_PATH}/python27/bin/pip install fuse-python
+export CFLAGS=$CFLAGS_TMP
+
+${INSTALL_PATH}/python27/bin/pip install tornado
+${INSTALL_PATH}/python27/bin/pip install urlgrabber
+
+
 cd ${WORK_DIR}
 
 rm -rf ${WORK_DIR}
-export CFLAGS=$CFLAGS_TMP
 
 echo -e "\nbuild finished"
 
