@@ -1,7 +1,8 @@
-import syslog
 import socket
-default_timeout = 5
+default_timeout = 1
 socket.setdefaulttimeout(default_timeout)
+
+import syslog
 import urllib2
 import stat
 from urlgrabber.keepalive import HTTPHandler
@@ -20,7 +21,16 @@ class OPFSClient:
         urllib2.install_opener(self.opener)
 
     def urlopen(self, url):
-        return urllib2.urlopen(url)
+        retry = 1
+        try:
+            while retry:
+                ret = urllib2.urlopen(url)
+                if ret:
+                    return ret
+        except:
+            retry -= 1
+
+        return None
         
     def is_alive(self):
         global default_timeout
@@ -28,13 +38,11 @@ class OPFSClient:
         host, port = self.target.split(':')
 
         try:
-            socket.setdefaulttimeout(1)
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((host, int(port)))
             ret = True
         except Exception:
             pass
-        socket.setdefaulttimeout(default_timeout)
         return ret
 
     def read(self, path, size, offset):
@@ -62,7 +70,11 @@ class OPFSClient:
 
     def request(self, method, path, param):
         path = self._build_url(urllib2.quote(path), param)
-        return self.urlopen('http://' + self.target + path).read()
+        url_fd = self.urlopen('http://' + self.target + path)
+        if url_fd:
+            return url_fd.read()
+        else:
+            return None
 
     def _build_url(self, url, param):
         return url + '?' + '&'.join(

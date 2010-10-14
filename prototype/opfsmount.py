@@ -50,23 +50,19 @@ class OPFS(Fuse):
 
     def getattr(self, path):
         self.log("getattr: %s" % (path))
-        try:
-            ret = None
+        ret = -errno.ENOENT
 
+        try:
             # get attribute from all peers
             for peer in self.peers:
                 ret = self._stat_opfs(path, peer)
-                if ret:
+                if ret != -errno.ENOENT:
                     break
-
-            if ret:
-                return ret
-            else:
-                return -errno.ENOENT
 
         except Exception, info:
             self.log("getattr error: %s" % (info))
-            return -errno.ENOENT
+
+        return ret
 
     def readdir(self, path, offset):
         self.log("readdir: %s" % (path))
@@ -83,11 +79,11 @@ class OPFS(Fuse):
                     if not(dirname in dirs):
                         dirs.append(dirname)
 
-            for r in dirs:
-                yield fuse.Direntry(r)
-
         except Exception, info:
             self.log("readdir error: %s" % (info))
+
+        for r in dirs:
+            yield fuse.Direntry(r)
 
     def open(self, path, flags):
         self.log("open: %s" % (path))
