@@ -15,6 +15,8 @@ except ImportError:
 import fuse
 from fuse import Fuse
 
+read_cache = {}
+stat_cache = {}
 
 if not hasattr(fuse, '__version__'):
     raise RuntimeError(
@@ -91,10 +93,12 @@ class OPFS(Fuse):
         self.log("open: %s" % (path))
         # open supports READONLY access
         try:
-            if self._search_peer_by_path(path):
+            peer = self._search_peer_by_path(path)
+            if peer:
                 if self._is_readonly(flags):
                     # ok
-                    self.log("OKOK")
+                    global stat_cache
+                    stat_cache[path] = self._stat_opfs(path, peer)
                     return
                 else:
                     # write not support
@@ -106,14 +110,22 @@ class OPFS(Fuse):
             self.log("open error: %s" % (info))
 
     def read(self, path, size, offset):
-        self.log("read: %s" % (path))
+        global read_cache
+        self.log("read: %s ,size=%d, offset=%d" % (path, size, offset))
+        if path in read_cache:
+            if read_cache[path][0] == offset:
+                if len(read_cache[path][1]) == size:
+                    return read_cache[path][1]
         try:
             peer = self._search_peer_by_path(path)
 
             filesize = self._file_size_opfs(path, peer)
             if filesize:
                 if offset < filesize:
-                    return self._read_opfs(path, size, offset, peer)
+                    data = self._read_opfs(path, size * 2, offset, peer)
+                    ret = data[0:len(data)/2]
+                    read_cache[path] = [offset + size, data[len(data)/2:]]
+                    return ret
                 else:
                     # invalid offset
                     return ''
@@ -170,8 +182,12 @@ class OPFS(Fuse):
             return None
 
     def _file_size_opfs(self, path, peer):
-        path = path
-        st = self._stat_opfs(path, peer)
+        global stat_cache
+        st = None
+        if not (path in stat_cache):
+            stat_cache[path] = self._stat_opfs(path, peer)
+
+        st = stat_cache[path]
         if st:
             return st.st_size
         else:
